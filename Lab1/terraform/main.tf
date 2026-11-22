@@ -10,7 +10,8 @@ terraform {
 }
 
 provider "aws" {
-  region = var.aws_region
+  region  = var.aws_region
+  profile = "nt548-lab"
 }
 
 module "vpc" {
@@ -58,4 +59,91 @@ output "private_route_table_id" {
 
 output "default_security_group_id" {
   value = module.vpc.default_security_group_id
+}
+
+
+# ==========================================
+# EC2 SSH Key Pair
+# ==========================================
+
+resource "aws_key_pair" "lab" {
+  key_name = "nt548-lab1-key"
+
+  public_key = file(
+    pathexpand("~/.ssh/nt548-lab1-key.pub")
+  )
+
+  tags = {
+    Name = "nt548-lab1-key"
+  }
+}
+
+
+# ==========================================
+# Public EC2
+# ==========================================
+
+module "ec2_public" {
+  source = "./modules/ec2"
+
+  instance_name = "nt548-lab1-public-ec2"
+  instance_type = "t3.micro"
+
+  subnet_id = module.vpc.public_subnet_id
+
+  security_group_ids = [
+    module.vpc.default_security_group_id
+  ]
+
+  key_name                    = aws_key_pair.lab.key_name
+  associate_public_ip_address = true
+}
+
+# ==========================================
+# Private EC2
+# ==========================================
+
+module "ec2_private" {
+  source = "./modules/ec2"
+
+  instance_name = "nt548-lab1-private-ec2"
+  instance_type = "t3.micro"
+
+  subnet_id = module.vpc.private_subnet_id
+
+  security_group_ids = [
+    module.vpc.default_security_group_id
+  ]
+
+  key_name                    = aws_key_pair.lab.key_name
+  associate_public_ip_address = false
+}
+
+
+# ==========================================
+# Public EC2 Outputs
+# ==========================================
+
+output "public_ec2_id" {
+  value = module.ec2_public.instance_id
+}
+
+output "public_ec2_public_ip" {
+  value = module.ec2_public.public_ip
+}
+
+output "public_ec2_private_ip" {
+  value = module.ec2_public.private_ip
+}
+
+# ==========================================
+# Private EC2 Outputs
+# ==========================================
+
+output "private_ec2_id" {
+  value = module.ec2_private.instance_id
+}
+
+output "private_ec2_private_ip" {
+  value = module.ec2_private.private_ip
 }
