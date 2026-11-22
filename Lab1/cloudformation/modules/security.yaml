@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Dedicated SSH security groups for the public and private EC2.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+
+Parameters:
+  NamePrefix:
+    Type: String
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SshCidr:
+    Type: String
+
+Resources:
+  PublicGroup:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: The public instance is the SSH entry point.
+        must: [Limit inbound SSH to one IPv4 address.]
+    Properties:
+      GroupDescription: SSH from the operator
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SshCidr
+      Tags:
+        - Key: Name
+          Value: !Sub '${NamePrefix}-public-sg'
+
+  PrivateGroup:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Permit SSH through the public instance.
+        must: [Use the public security group as the SSH source.]
+    Properties:
+      GroupDescription: SSH from the public EC2
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !GetAtt PublicGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: !Sub '${NamePrefix}-private-sg'
+
+Outputs:
+  PublicGroupId:
+    Value: !GetAtt PublicGroup.GroupId
+  PrivateGroupId:
+    Value: !GetAtt PrivateGroup.GroupId
