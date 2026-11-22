@@ -1,0 +1,14 @@
+# Terraform working directories and state
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# Terraform local variable files and crash logs
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+
+# macOS metadata
+.DS_Store
