@@ -91,9 +91,7 @@ module "ec2_public" {
 
   subnet_id = module.vpc.public_subnet_id
 
-  security_group_ids = [
-    module.vpc.default_security_group_id
-  ]
+  security_group_ids = [module.security_groups.public_id]
 
   key_name                    = aws_key_pair.lab.key_name
   associate_public_ip_address = true
@@ -111,9 +109,7 @@ module "ec2_private" {
 
   subnet_id = module.vpc.private_subnet_id
 
-  security_group_ids = [
-    module.vpc.default_security_group_id
-  ]
+  security_group_ids = [module.security_groups.private_id]
 
   key_name                    = aws_key_pair.lab.key_name
   associate_public_ip_address = false
@@ -146,4 +142,10 @@ output "private_ec2_id" {
 
 output "private_ec2_private_ip" {
   value = module.ec2_private.private_ip
+}
+
+module "security_groups" {
+  source           = "./modules/security_groups"
+  vpc_id           = module.vpc.vpc_id
+  ssh_allowed_cidr = var.ssh_allowed_cidr
 }
