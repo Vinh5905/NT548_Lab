@@ -1,0 +1,102 @@
+name: Lab 2 - Terraform
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Lab2/bai1_terraform/terraform/**'
+      - '.github/workflows/lab2-terraform.yml'
+  pull_request:
+    paths:
+      - 'Lab2/bai1_terraform/terraform/**'
+      - '.github/workflows/lab2-terraform.yml'
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Terraform operation
+        type: choice
+        required: true
+        default: plan
+        options: [plan, apply, destroy]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  TF_DIR: Lab2/bai1_terraform/terraform
+  TF_VERSION: '1.16.5'
+  TF_IN_AUTOMATION: 'true'
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: Format and validate
+        run: |
+          terraform -chdir="$TF_DIR" fmt -check -recursive
+          terraform -chdir="$TF_DIR" init -backend=false -input=false -lockfile=readonly
+          terraform -chdir="$TF_DIR" validate -no-color
+      - name: Scan with Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: ${{ env.TF_DIR }}
+          framework: terraform
+          output_format: cli
+          soft_fail: 'true'
+
+  aws:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: lab2-bai1-terraform
+      cancel-in-progress: false
+    env:
+      TF_STATE_BUCKET: ${{ vars.LAB2_STATE_BUCKET }}
+      TF_VAR_ssh_public_key: ${{ vars.LAB2_SSH_PUBLIC_KEY }}
+      TF_VAR_ssh_allowed_cidr: ${{ secrets.LAB2_SSH_ALLOWED_CIDR }}
+      OPERATION: ${{ inputs.operation }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: ${{ vars.LAB2_AWS_ROLE_ARN }}
+          allowed-account-ids: '947856326077'
+      - name: Initialize remote state
+        run: |
+          terraform -chdir="$TF_DIR" init -input=false -lockfile=readonly \
+            -backend-config="bucket=$TF_STATE_BUCKET"
+      - name: Build execution plan
+        run: |
+          args=()
+          if [[ "$OPERATION" == destroy ]]; then
+            args=(-destroy)
+          fi
+          terraform -chdir="$TF_DIR" plan "${args[@]}" -input=false -no-color \
+            -lock-timeout=5m -out="$RUNNER_TEMP/lab2.tfplan"
+      - name: Apply saved plan
+        if: inputs.operation == 'apply' || inputs.operation == 'destroy'
+        run: |
+          terraform -chdir="$TF_DIR" apply -input=false -no-color \
+            -lock-timeout=5m "$RUNNER_TEMP/lab2.tfplan"
