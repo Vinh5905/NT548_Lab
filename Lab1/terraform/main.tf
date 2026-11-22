@@ -54,3 +54,8 @@ output "nat_eip" {
 output "private_route_table_id" {
   value = module.vpc.private_route_table_id
 }
+
+
+output "default_security_group_id" {
+  value = module.vpc.default_security_group_id
+}
