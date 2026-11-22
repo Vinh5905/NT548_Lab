@@ -161,16 +161,8 @@ resource "aws_route_table_association" "private" {
 resource "aws_default_security_group" "default" {
   vpc_id = aws_vpc.main.id
 
-  # No inbound rules by default.
-  # EC2 instances will use dedicated security groups.
-
-  # Allow outbound IPv4 traffic
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  ingress = []
+  egress  = []
 
   tags = {
     Name = "${var.vpc_name}-default-sg"
