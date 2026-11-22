@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: NT548 Lab 1 with reusable nested stacks.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+
+Parameters:
+  SshCidr:
+    Type: String
+    AllowedPattern: '(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/32'
+  SshPublicKey:
+    Type: String
+    MinLength: 32
+  AmiId:
+    Type: AWS::EC2::Image::Id
+
+Resources:
+  Network:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: modules/network.yaml
+      Parameters:
+        NamePrefix: !Ref AWS::StackName
+
+  Security:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: modules/security.yaml
+      Parameters:
+        NamePrefix: !Ref AWS::StackName
+        VpcId: !GetAtt Network.Outputs.VpcId
+        SshCidr: !Ref SshCidr
+
+  LabKey:
+    Type: AWS::EC2::KeyPair
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Give the two instances the same SSH identity.
+        must: [Import only the OpenSSH public key.]
+    Properties:
+      KeyName: !Sub '${AWS::StackName}-key'
+      PublicKeyMaterial: !Ref SshPublicKey
+
+  PublicEc2:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: modules/ec2.yaml
+      Parameters:
+        Name: !Sub '${AWS::StackName}-public'
+        SubnetId: !GetAtt Network.Outputs.PublicSubnetId
+        SecurityGroupId: !GetAtt Security.Outputs.PublicGroupId
+        KeyName: !Ref LabKey
+        AmiId: !Ref AmiId
+        PublicIpEnabled: 'true'
+
+  PrivateEc2:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: modules/ec2.yaml
+      Parameters:
+        Name: !Sub '${AWS::StackName}-private'
+        SubnetId: !GetAtt Network.Outputs.PrivateSubnetId
+        SecurityGroupId: !GetAtt Security.Outputs.PrivateGroupId
+        KeyName: !Ref LabKey
+        AmiId: !Ref AmiId
+        PublicIpEnabled: 'false'
+
+Outputs:
+  VpcId:
+    Value: !GetAtt Network.Outputs.VpcId
+  DefaultSecurityGroupId:
+    Value: !GetAtt Network.Outputs.DefaultSecurityGroupId
+  PublicIp:
+    Value: !GetAtt PublicEc2.Outputs.PublicIp
+  PrivateIp:
+    Value: !GetAtt PrivateEc2.Outputs.PrivateIp
+  NatEip:
+    Value: !GetAtt Network.Outputs.NatEip

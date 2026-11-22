@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Reusable Ubuntu EC2 for a public or private subnet.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+
+Parameters:
+  Name:
+    Type: String
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+  AmiId:
+    Type: AWS::EC2::Image::Id
+  PublicIpEnabled:
+    Type: String
+    AllowedValues: ['true', 'false']
+
+Conditions:
+  IsPublic: !Equals [!Ref PublicIpEnabled, 'true']
+
+Resources:
+  Instance:
+    Type: AWS::EC2::Instance
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Reuse one instance definition across both network tiers.
+        must: [Require IMDSv2, encrypt the root volume, assign a public IP only for the public tier.]
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            Encrypted: true
+            VolumeType: gp3
+            VolumeSize: 8
+            DeleteOnTermination: true
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: !If [IsPublic, true, false]
+          SubnetId: !Ref SubnetId
+          GroupSet:
+            - !Ref SecurityGroupId
+      Tags:
+        - Key: Name
+          Value: !Ref Name
+
+Outputs:
+  PublicIp:
+    Condition: IsPublic
+    Value: !GetAtt Instance.PublicIp
+  PrivateIp:
+    Value: !GetAtt Instance.PrivateIp
